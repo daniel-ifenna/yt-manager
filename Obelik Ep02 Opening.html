@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>OBELIK — Episode 2 Opening</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Anton&family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; background: #0a0a0a; overflow: hidden; height: 100%; }
+  #root { position: fixed; inset: 0; }
+  @keyframes obgrain {
+    0%   { transform: translate(0, 0); }
+    33%  { transform: translate(-6%, 4%); }
+    66%  { transform: translate(5%, -5%); }
+    100% { transform: translate(-3%, 2%); }
+  }
+  /* hide the scrubber while recording the tab so the capture is clean */
+  body[data-recording] .anim-playbar { display: none !important; }
+  body[data-recording] { cursor: none; }
+</style>
+</head>
+<body>
+<div id="root" data-video-root data-screen-label="00:00"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="animations.jsx"></script>
+<script type="text/babel" src="video/illustrations.jsx"></script>
+<script type="text/babel" src="video/cinematic.jsx"></script>
+<script type="text/babel" src="video/scenes.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+const { Stage, Sprite, useTime, useTimeline } = window;
+const {
+  SceneColdOpen, SceneTitle, SceneProblem, SceneLogo, SceneLifecycle, ScenePortals, SceneEscrow, SceneManager,
+  SfxDirector, CinematicOverlay,
+} = window;
+
+// Exposes window.__seek(t) for review screenshots
+function SeekBridge() {
+  const { setTime, setPlaying } = useTimeline();
+  React.useEffect(() => { window.__seek = (t) => { setPlaying(false); setTime(t); }; }, [setTime, setPlaying]);
+  return null;
+}
+
+// Updates the video root's data-screen-label each whole second (comment context)
+function TimeLabeler() {
+  const t = useTime();
+  React.useEffect(() => {
+    const s = Math.floor(t);
+    const lbl = `00:${String(s).padStart(2, '0')}`;
+    const el = document.querySelector('[data-video-root]');
+    if (el && el.dataset.screenLabel !== lbl) el.dataset.screenLabel = lbl;
+  }, [Math.floor(t)]);
+  return null;
+}
+
+// ── Narration script — each segment is a timeline window with optional voice ─
+// tEnd is the *planned* end; if the spoken line runs longer, the director holds
+// the last frame until the voice finishes (never cuts a line off).
+const SEGMENTS = [
+  { t: 0.0,  text: null },
+  { t: 1.6,  text: "Is this... on record?" },
+  { t: 4.4,  text: null },                                   // title slam (music)
+  { t: 7.2,  text: "For years, construction has run on scattered tools." },
+  { t: 10.6, text: "Projects tracked through emails and WhatsApp messages." },
+  { t: 14.0, text: "Budgets buried in spreadsheets." },
+  { t: 16.4, text: "Payments made on trust, with no guarantee." },
+  { t: 19.8, text: "And disputes that drag on in court." },
+  { t: 23.2, text: "Five players, and not one shared system." },
+  { t: 27.0, text: "This is Obelik." },
+  { t: 29.0, text: "A full lifecycle construction and procurement platform, built for a global industry, with multi-currency support." },
+  { t: 36.0, text: "From the first application, through bidding, construction, and final handover, every stage of a project lives in one place." },
+  { t: 44.0, text: "Obelik gives every role its own portal." },
+  { t: 47.0, text: "A manager who funds the project. Contractors who build. Vendors who supply. A consultant who certifies the work. And an admin overseeing it all." },
+  { t: 58.0, text: "At the heart of Obelik is its escrow system. Money only moves when work is proven." },
+  { t: 64.5, text: "First, the owner funds a secure escrow wallet, through an integrated financial technology system." },
+  { t: 70.5, text: "As work is completed, the contractor raises a claim for payment." },
+  { t: 75.5, text: "The consultant, or architect, reviews the work and issues an interim payment certificate." },
+  { t: 81.5, text: "Only then does the escrow release payment to the contractor, net of retention." },
+  { t: 87.5, text: "From its own escrow, the contractor pays vendors for the supply of materials." },
+  { t: 93.5, text: "And through a change order, the owner can pay a vendor directly." },
+  { t: 99.0, text: "Every balance is live, straight from the ledger." },
+  { t: 102.5, text: "And it all begins with the people who hold the purse strings. In today's episode, we focus on the manager portal." },
+];
+const DURATION = 113.5;
+
+// ── Speech controller — queues sentence-chunked utterances, fires onDone ─────
+function makeSpeech() {
+  const synth = typeof window !== 'undefined' ? window.speechSynthesis : null;
+  let voice = null;
+  function pickVoice() {
+    if (!synth) return null;
+    const vs = synth.getVoices() || [];
+    if (!vs.length) return null;
+    const byName = [
+      'Google UK English Female',
+      'Microsoft Libby Online (Natural) - English (United Kingdom)',
+      'Microsoft Sonia Online (Natural) - English (United Kingdom)',
+      'Microsoft Hazel - English (United Kingdom)',
+      'Serena', 'Kate', 'Stephanie', 'Fiona',
+    ];
+    for (const n of byName) { const v = vs.find(x => x.name === n); if (v) return v; }
+    // any en-GB voice that reads female
+    const gbFemale = vs.find(v => /en[-_]GB/i.test(v.lang) && /(female|libby|sonia|hazel|serena|kate|stephanie|fiona|aria)/i.test(v.name));
+    if (gbFemale) return gbFemale;
+    // any en-GB voice
+    const gb = vs.find(v => /en[-_]GB/i.test(v.lang));
+    if (gb) return gb;
+    // any female-sounding english voice
+    const enFemale = vs.find(v => /^en/i.test(v.lang) && /(female|aria|jenny|samantha|karen|victoria|zira|susan|hazel|fiona|tessa|moira)/i.test(v.name));
+    if (enFemale) return enFemale;
+    return vs.find(v => /^en/i.test(v.lang)) || vs[0];
+  }
+  if (synth) {
+    voice = pickVoice();
+    synth.onvoiceschanged = () => { voice = pickVoice(); };
+  }
+  return {
+    speak(text) {
+      if (!synth || !text) return;
+      try { synth.cancel(); } catch {}
+      const parts = text.match(/[^.!?]+[.!?]*/g) || [text];
+      parts.forEach((p) => {
+        const u = new SpeechSynthesisUtterance(p.trim());
+        u.rate = 1.05; u.pitch = 1.04; u.volume = 1;
+        if (voice) { u.voice = voice; u.lang = voice.lang; } else { u.lang = 'en-GB'; }
+        synth.speak(u);
+      });
+    },
+    cancel() { try { synth && synth.cancel(); } catch {} },
+    pause()  { try { synth && synth.pause(); } catch {} },
+    resume() { try { synth && synth.resume(); } catch {} },
+  };
+}
+
+// ── Linear clock — advances the playhead at true 1:1 real time ──────────────
+// Uses setInterval + wall-clock delta (not rAF), so it keeps perfect real-time
+// pace even when the tab is backgrounded; it never steps, waits, or stalls.
+// Narration + SFX read this same clock, so audio and video stay locked.
+function LinearClock() {
+  const { time, duration, playing, setTime, setPlaying } = useTimeline();
+  const timeRef = React.useRef(time);
+  timeRef.current = time;
+  const iv = React.useRef(0);
+  React.useEffect(() => {
+    if (!playing) { if (iv.current) { clearInterval(iv.current); iv.current = 0; } return; }
+    let last = performance.now();
+    let acc = timeRef.current >= duration - 0.01 ? 0 : timeRef.current;
+    setTime(acc);
+    iv.current = setInterval(() => {
+      const now = performance.now();
+      acc += (now - last) / 1000;
+      last = now;
+      if (acc >= duration) {
+        setTime(duration); setPlaying(false);
+        clearInterval(iv.current); iv.current = 0; return;
+      }
+      setTime(acc);
+    }, 1000 / 60);
+    return () => { if (iv.current) { clearInterval(iv.current); iv.current = 0; } };
+  }, [playing]); // eslint-disable-line
+  return null;
+}
+
+// ── Voice layer — plays a real MP3 voiceover if one is loaded, else TTS ──────
+// If the user loads a voiceover file (Poster → "Use my voiceover", or an
+// assets/voiceover.mp3 that exists), it plays that track locked to the
+// timeline — identical every play and fully capturable by a screen recorder.
+// With no file, it falls back to the browser speech engine, cue-fired per beat.
+const VO = { audio: null, ready: false };
+function VoiceLayer() {
+  const { time, playing } = useTimeline();
+  const speech = React.useRef(null);
+  if (!speech.current) speech.current = makeSpeech();
+  const lastIdx = React.useRef(-1);
+  const lastT = React.useRef(0);
+  const [hasVO, setHasVO] = React.useState(false);
+
+  React.useEffect(() => {
+    window.__loadVO = (url, onOk) => {
+      try {
+        if (VO.audio) { try { VO.audio.pause(); } catch (e) {} }
+        const a = new Audio(url); a.preload = 'auto';
+        const ok = () => { VO.audio = a; VO.ready = true; setHasVO(true); speech.current.cancel(); onOk && onOk(); };
+        a.addEventListener('canplaythrough', ok, { once: true });
+        a.addEventListener('canplay', ok, { once: true });
+        a.addEventListener('error', () => { VO.ready = false; });
+      } catch (e) {}
+    };
+    // optional baked-in track
+    const probe = new Audio('assets/voiceover.mp3');
+    probe.addEventListener('canplay', () => { VO.audio = probe; VO.ready = true; setHasVO(true); speech.current.cancel(); }, { once: true });
+    return () => { window.__loadVO = null; };
+  }, []);
+
+  React.useEffect(() => {
+    if (!playing) { speech.current.pause(); if (VO.audio) { try { VO.audio.pause(); } catch (e) {} } }
+    else { speech.current.resume(); }
+  }, [playing]);
+
+  React.useEffect(() => {
+    const t = time;
+    const backward = t < lastT.current - 0.3;
+    lastT.current = t;
+
+    if (hasVO && VO.audio) {
+      if (playing) {
+        if (Math.abs(VO.audio.currentTime - t) > 0.3) { try { VO.audio.currentTime = t; } catch (e) {} }
+        if (VO.audio.paused) VO.audio.play().catch(() => {});
+      } else if (!VO.audio.paused) { try { VO.audio.pause(); } catch (e) {} }
+      return;
+    }
+    // TTS fallback
+    if (backward) { speech.current.cancel(); lastIdx.current = -1; }
+    if (!playing) return;
+    let idx = -1;
+    for (let i = 0; i < SEGMENTS.length; i++) { if (SEGMENTS[i].t <= t + 1e-3) idx = i; else break; }
+    if (idx !== lastIdx.current) {
+      lastIdx.current = idx;
+      const seg = SEGMENTS[idx];
+      if (seg && seg.text) speech.current.speak(seg.text);
+    }
+  }, [time, playing, hasVO]);
+
+  return null;
+}
+
+// ── One-click recorder (tab capture → downloadable video) ────────────────────
+async function startRecording({ onStart, onStop }) {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia || !window.MediaRecorder) {
+    alert('In-browser recording is not supported here. Use ⌘⇧5 (Mac) or Game Bar / ⊞+G (Windows) to screen-record with system audio instead.');
+    return false;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 30, width: 1920, height: 1080 }, audio: true });
+  } catch (e) { return false; } // cancelled
+  const canMp4 = MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported('video/mp4;codecs=avc1');
+  const mime = canMp4 ? 'video/mp4;codecs=avc1'
+    : (MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm');
+  let rec;
+  try { rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 }); }
+  catch (e) { rec = new MediaRecorder(stream); }
+  const chunks = [];
+  rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    document.body.removeAttribute('data-recording');
+    try { stream.getTracks().forEach((tk) => tk.stop()); } catch (e) {}
+    const type = (rec.mimeType || mime).split(';')[0];
+    const ext = type.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
+    const blob = new Blob(chunks, { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'Is This On Record - Ep02.' + ext; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    window.__OBELIK_REC = null;
+    onStop && onStop(ext);
+  };
+  stream.getVideoTracks()[0].addEventListener('ended', () => { if (rec.state !== 'inactive') rec.stop(); });
+  window.__OBELIK_REC = rec;
+  document.body.setAttribute('data-recording', '1');
+  rec.start();
+  onStart && onStart();
+  return true;
+}
+function stopRecording() { const r = window.__OBELIK_REC; if (r && r.state !== 'inactive') r.stop(); }
+
+// Stops the recorder automatically when the film finishes
+function RecordWatcher() {
+  const { time, duration, playing } = useTimeline();
+  React.useEffect(() => {
+    if (window.__OBELIK_REC && window.__OBELIK_REC.state === 'recording' && time >= duration - 0.05) {
+      setTimeout(stopRecording, 500);
+    }
+  }, [time, playing]);
+  return null;
+}
+
+// Poster shown before first play (also the audio-unlock gesture target)
+function Poster() {
+  const { time, playing, setPlaying } = useTimeline();
+  const [voName, setVoName] = React.useState(null);
+  const [prepping, setPrepping] = React.useState(false);
+  if (playing || time > 0.25) return null;
+
+  const play = () => { try { window.OBELIK_SOUND && window.OBELIK_SOUND.ensure(); } catch (e) {} setPlaying(true); };
+
+  const onPickVO = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    window.__loadVO && window.__loadVO(url, () => setVoName(f.name));
+    setVoName(f.name + ' …');
+  };
+
+  const record = async (e) => {
+    e.stopPropagation();
+    try { window.OBELIK_SOUND && window.OBELIK_SOUND.ensure(); } catch (er) {}
+    if (!VO.ready) {
+      const ok = window.confirm(
+        "No voiceover file is loaded.\n\nThe recording will include the music and sound effects, but NOT the spoken narration — browser speech can't be captured to a file.\n\nFor a complete video, click \u201cUse my voiceover\u201d first and load an MP3. Record anyway?");
+      if (!ok) return;
+    }
+    setPrepping(true);
+    const started = await startRecording({
+      onStart: () => { try { window.__seek && window.__seek(0); } catch (er) {} setPlaying(true); },
+      onStop: () => { setPlaying(false); setPrepping(false); },
+    });
+    if (!started) setPrepping(false);
+  };
+
+  const btn = (bg, color) => ({
+    display: 'flex', alignItems: 'center', gap: 12, whiteSpace: 'nowrap', cursor: 'pointer',
+    background: bg, color, fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: 18,
+    padding: '14px 26px', borderRadius: 44, border: 'none',
+  });
+
+  return (
+    <div onClick={play} style={{
+      position: 'absolute', inset: 0, zIndex: 30, cursor: 'pointer',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      background: 'radial-gradient(ellipse 60% 60% at 50% 45%, #15331f 0%, #070d0a 70%)',
+    }}>
+      <img src="assets/obelik-logo.png" alt="" style={{ width: 120, height: 120, marginBottom: 22, filter: 'drop-shadow(0 14px 36px rgba(0,0,0,0.5))' }} />
+      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 17, letterSpacing: '0.35em', color: '#e8782e', fontWeight: 700, marginBottom: 22 }}>IS THIS ON RECORD? · EP.02</div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <button onClick={(e) => { e.stopPropagation(); play(); }} style={{ ...btn('#e8782e', '#0d2a1c'), boxShadow: '0 14px 34px rgba(232,120,46,0.45)' }}>
+          <svg width="18" height="18" viewBox="0 0 14 14"><path d="M3 2l9 5-9 5V2z" fill="#0d2a1c" /></svg>
+          PLAY WITH VOICEOVER
+        </button>
+        <button onClick={record} style={btn('rgba(255,255,255,0.10)', '#fff')} title="Record the tab to a video file">
+          <span style={{ width: 12, height: 12, borderRadius: '50%', background: '#d8261d', boxShadow: '0 0 0 4px rgba(216,38,29,0.25)' }} />
+          {prepping ? 'STARTING…' : 'RECORD MP4'}
+        </button>
+      </div>
+
+      <label onClick={(e) => e.stopPropagation()} style={{ marginTop: 22, display: 'inline-flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontFamily: "'Inter', sans-serif", fontSize: 14, color: voName ? '#3fae6e' : 'rgba(255,255,255,0.66)', borderBottom: '1px dashed rgba(255,255,255,0.3)', paddingBottom: 3 }}>
+        {voName ? ('✓ Voiceover: ' + voName.replace(' …', '')) : '＋ Use my voiceover (MP3) — for a fully-recordable, baked-in track'}
+        <input type="file" accept="audio/*" style={{ display: 'none' }} onChange={onPickVO} />
+      </label>
+
+      <div style={{ marginTop: 14, fontFamily: "'Inter', sans-serif", fontSize: 12.5, color: 'rgba(255,255,255,0.42)', maxWidth: 560, textAlign: 'center', lineHeight: 1.5 }}>
+        Record captures this tab — choose “This Tab” and enable “Share tab audio”. For the spoken voice in the file, load an MP3 above, or screen-record with system audio (⌘⇧5 / Game Bar).
+      </div>
+    </div>
+  );
+}
+
+function Film() {
+  return (
+    <Stage width={1280} height={720} duration={DURATION} background="#0a0a0a" persistKey="obelik-ep2" autoplay={false} loop={false} externalClock={true}>
+      <TimeLabeler />
+      <SeekBridge />
+      <LinearClock />
+      <VoiceLayer />
+      <RecordWatcher />
+      <SfxDirector />
+      <Sprite start={0}     end={4.7}>   <SceneColdOpen /></Sprite>
+      <Sprite start={4.4}   end={7.6}>   <SceneTitle /></Sprite>
+      <Sprite start={7.0}   end={27.4}>  <SceneProblem /></Sprite>
+      <Sprite start={26.9}  end={36.4}>  <SceneLogo /></Sprite>
+      <Sprite start={35.8}  end={44.4}>  <SceneLifecycle /></Sprite>
+      <Sprite start={43.8}  end={58.4}>  <ScenePortals /></Sprite>
+      <Sprite start={57.8}  end={102.9}> <SceneEscrow /></Sprite>
+      <Sprite start={102.3} end={113.5}> <SceneManager /></Sprite>
+      <CinematicOverlay />
+      <Poster />
+    </Stage>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Film />);
+</script>
+</body>
+</html>
